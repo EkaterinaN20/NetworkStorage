@@ -1,0 +1,95 @@
+import javafx.scene.control.Alert;
+
+import java.io.*;
+import java.net.Socket;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+
+public class ConnectionHandler implements Runnable {
+
+    private DataInputStream is;
+    private DataOutputStream os;
+    private List<File> serverFileList = new ArrayList<>();
+
+    public ConnectionHandler(Socket socket) throws IOException, InterruptedException {
+        System.out.println("Connection accepted");
+        is = new DataInputStream(socket.getInputStream());
+        os = new DataOutputStream(socket.getOutputStream());
+        Thread.sleep(2000);
+    }
+
+    @Override
+    public void run() {
+        byte[] buffer = new byte[1024];
+        fillServerFiles();
+
+        while (true) {
+            try {
+                String command = is.readUTF();
+                if (command.equals("./upload")) {
+                    String fileName = is.readUTF();
+                    System.out.println("fileName: " + fileName);
+                    long fileLength = is.readLong();
+                    System.out.println("fileLength: " + fileLength);
+                    File file = new File(ServerGUI.serverPath + "/" + fileName);
+                    if (!file.exists()) {
+                        file.createNewFile();
+                    }
+                    try (FileOutputStream fos = new FileOutputStream(file)) {
+                        for (long i = 0; i < (fileLength / 1024 == 0 ? 1 : fileLength / 1024); i++) {
+                            int bytesRead = is.read(buffer);
+                            fos.write(buffer, 0, bytesRead);
+                        }
+                    }
+                    fillServerFiles();
+                    os.writeUTF("OK");
+                } else if (command.equals("./download")) {
+
+                    String fileName = is.readUTF();
+                    System.out.println("fileName: " + fileName);
+                    File serverFile = findFileByName(fileName);
+                    if (serverFile == null) {
+                        throw new RuntimeException("file not found");
+                    }
+                    long fileLength = serverFile.length();
+                    System.out.println("fileLength: " + fileLength);
+                    os.writeLong(fileLength);
+
+                    FileInputStream fis = new FileInputStream(serverFile);
+                    buffer = new byte[1024];
+                    while (fis.available() > 0) {
+                        int bytesRead = fis.read(buffer);
+                        os.write(buffer, 0, bytesRead);
+                    }
+                    os.flush();
+                }
+            } catch (Exception e) {
+                //  e.printStackTrace();
+                System.out.println("connection handler exception");
+            }
+        }
+    }
+
+    void fillServerFiles() {
+        serverFileList.clear();
+        String serverPath = "./server/src/resources/";
+        File dir = new File(serverPath);
+        if (!dir.exists()) {
+            throw new RuntimeException("directory resource not exists on server");
+        }
+        for (File file : Objects.requireNonNull(dir.listFiles())) {
+            serverFileList.add(file);
+        }
+    }
+
+    private File findFileByName(String fileName) {
+        for (File file : serverFileList) {
+            if (file.getName().equals(fileName)) {
+                return file;
+            }
+        }
+        return null;
+    }
+
+}
