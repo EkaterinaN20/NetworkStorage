@@ -25,7 +25,7 @@ public class Server extends Thread {
                 executor.execute(new ConnectionHandler(socket));
             }
         } catch (Exception e) {
-            //e.printStackTrace();
+            e.printStackTrace();
         } finally {
             executor.shutdownNow();
         }
